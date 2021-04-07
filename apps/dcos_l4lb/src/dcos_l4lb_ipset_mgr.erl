@@ -90,8 +90,17 @@ handle_call(get_entries, _From, #state{netlink=Pid}=State) ->
     {ok, EntriesIPv6} = get_entries(Pid, ?IPSET_NAME_IPV6),
     {reply, EntriesIPv4 ++ EntriesIPv6, State};
 handle_call({add_entries, Entries}, _From, #state{netlink=Pid}=State) ->
+    IsIPv6Enabled = dcos_l4lb_config:ipv6_enabled(),
     lists:foreach(fun ({Protocol, IP, Port}) ->
-        {ok, []} = add_entry(Pid, Protocol, IP, Port)
+        Family = dcos_l4lb_app:family(IP),
+        case Family of
+          inet6 when not IsIPv6Enabled ->
+            {ok, <<>>};
+          inet ->
+            {ok, []} = add_entry(Pid, Protocol, IP, Port);
+          inet6 ->
+            {ok, []} = add_entry(Pid, Protocol, IP, Port)
+        end
     end, Entries),
     {reply, ok, State};
 handle_call({remove_entries, Entries}, _From, #state{netlink=Pid}=State) ->
